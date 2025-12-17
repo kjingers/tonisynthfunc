@@ -1,6 +1,23 @@
 # Bedtime Story Configuration
 # Edit these settings to change defaults for your iOS Shortcut
 
+# ===========================================
+# Filename Generation Settings
+# ===========================================
+
+# Maximum length of descriptive part (before UUID suffix)
+FILENAME_MAX_LENGTH = 50
+
+# Number of words to extract from text (Option A)
+FILENAME_WORD_COUNT = 6
+
+# Enable AI-powered title generation (Option B)
+# Requires Azure OpenAI configuration (see implementation plan)
+FILENAME_USE_AI = False
+
+# Max tokens for AI-generated title (Option B only)
+FILENAME_AI_MAX_TOKENS = 10
+
 # Default voice for bedtime stories
 # See full list: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
 # DEFAULT_VOICE = "en-US-AriaNeural"  # Expressive female voice with style support

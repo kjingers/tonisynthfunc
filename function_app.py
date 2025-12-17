@@ -9,7 +9,11 @@ from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPerm
 import requests
 import zipfile
 import io
-from story_config import DEFAULT_VOICE, DEFAULT_STYLE, OUTPUT_FORMAT, SAS_URL_EXPIRY_HOURS, SYNTHESIS_TTL_HOURS
+from story_config import (
+    DEFAULT_VOICE, DEFAULT_STYLE, OUTPUT_FORMAT, SAS_URL_EXPIRY_HOURS, SYNTHESIS_TTL_HOURS,
+    FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT
+)
+from filename_utils import generate_synthesis_id, generate_filename_with_uuid
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -36,8 +40,8 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 mimetype="application/json"
             )
         
-        # Generate unique synthesis ID and filename
-        synthesis_id = f"story-{uuid.uuid4()}"
+        # Generate descriptive synthesis ID and filename based on text content
+        synthesis_id = generate_synthesis_id(text, FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT)
         audio_filename = f"{synthesis_id}.mp3"
         
         logging.info(f'Starting batch synthesis: {synthesis_id}, {len(text)} chars')
@@ -376,7 +380,9 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
         
         speech_key = os.environ['SPEECH_SERVICE_KEY']
         speech_region = os.environ['SPEECH_SERVICE_REGION']
-        audio_filename = f"story_{uuid.uuid4()}.mp3"
+        
+        # Generate descriptive filename based on text content
+        audio_filename = generate_filename_with_uuid(text, FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT)
         
         # Standard TTS REST API
         synthesis_url = f"https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/v1"
