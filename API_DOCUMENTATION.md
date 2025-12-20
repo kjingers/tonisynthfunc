@@ -47,6 +47,48 @@ When `enable_character_voices` is not explicitly set, the API automatically enab
 - Keywords in first 10 words: "story", "adventure", "tale", "once"
 - Opening patterns: "Once upon a time", "Long ago", "Chapter 1", "Prologue"
 
+#### Markdown Formatting Support
+
+The API automatically cleans markdown formatting from input text to produce natural-sounding speech:
+
+**Handled automatically:**
+- **Tables** - Completely removed (as requested per issue #1)
+- **Bullets/Lists** - Converted to plain sentences (items read as normal lines)
+- **Headers** (`# ## ###`) - Converted to plain text
+- **Bold/Italic** (`**text**`, `*text*`) - Markers removed, text preserved
+- **Links** (`[text](url)`) - URL removed, link text preserved
+- **Code blocks** - Removed entirely
+- **Horizontal rules** (`---`) - Removed
+- **Blockquotes** (`>`) - Markers removed, text preserved
+
+**Example:**
+```markdown
+# The Adventure
+
+Here are the characters:
+- **Alice** - The hero
+- Bob - The sidekick
+
+| Name | Role |
+|------|------|
+| Alice | Hero |
+
+Once upon a time...
+```
+
+Becomes:
+```text
+The Adventure
+
+Here are the characters:
+Alice - The hero
+Bob - The sidekick
+
+Once upon a time...
+```
+
+The response includes a `markdown_cleaned` boolean indicating if any markdown was removed.
+
 #### Response (200 OK)
 
 ```json
@@ -58,7 +100,8 @@ When `enable_character_voices` is not explicitly set, the API automatically enab
   "voice": "string - Voice used",
   "enable_character_voices": "boolean",
   "adventure_mode_auto_detected": "boolean",
-  "text_length": "number - Character count",
+  "markdown_cleaned": "boolean - True if markdown formatting was removed",
+  "text_length": "number - Character count (after markdown cleaning)",
   "estimated_duration_minutes": "number",
   "message": "string"
 }

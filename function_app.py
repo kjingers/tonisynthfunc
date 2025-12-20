@@ -18,6 +18,7 @@ from filename_utils import generate_synthesis_id, generate_filename_with_uuid
 from character_voices import generate_character_ssml, generate_simple_ssml
 from validators import is_adventure_mode_text, validate_batch_start_request, validate_synthesis_id
 from http_helpers import json_response, error_response, validation_error, not_found_error
+from markdown_utils import clean_markdown_for_speech
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -46,6 +47,12 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
         if not validation.is_valid:
             return validation_error(validation.error, validation.field)
         
+        # Clean markdown formatting from text for better speech synthesis
+        # This removes tables, converts bullets to plain text, etc.
+        original_length = len(text) if text else 0
+        text = clean_markdown_for_speech(text)
+        markdown_cleaned = len(text) != original_length if text else False
+        
         # NEW: Character voice expressions (optional)
         # Auto-detect adventure/story mode if not explicitly specified
         enable_character_voices_param = req_body.get('enable_character_voices')
@@ -72,7 +79,7 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
         synthesis_id = generate_synthesis_id(text, FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT)
         audio_filename = f"{synthesis_id}.mp3"
         
-        logging.info(f'Starting batch synthesis: {synthesis_id}, {len(text)} chars, character_voices={enable_character_voices}')
+        logging.info(f'Starting batch synthesis: {synthesis_id}, {len(text)} chars, character_voices={enable_character_voices}, markdown_cleaned={markdown_cleaned}')
         
         speech_key = os.environ['SPEECH_SERVICE_KEY']
         speech_region = os.environ['SPEECH_SERVICE_REGION']
@@ -163,6 +170,7 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 "voice": voice_name,
                 "enable_character_voices": enable_character_voices,
                 "adventure_mode_auto_detected": adventure_mode_auto_detected,
+                "markdown_cleaned": markdown_cleaned,
                 "text_length": len(text),
                 "estimated_duration_minutes": len(text) / 1000 * 0.5,
                 "message": "Synthesis started. Audio URL will be available when complete (typically 1-3 min)."
@@ -393,6 +401,9 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
                 status_code=400,
                 mimetype="application/json"
             )
+        
+        # Clean markdown formatting from text for better speech synthesis
+        text = clean_markdown_for_speech(text)
         
         # Redirect long texts to batch API
         if len(text) > 5000:
