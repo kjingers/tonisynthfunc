@@ -8,8 +8,23 @@ Enable with: enable_character_voices=True in API request
 """
 
 import re
+import logging
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
+
+# Import LLM-based gender detection (optional feature)
+try:
+    from gender_detection import (
+        detect_gender_with_llm,
+        is_llm_available,
+        clear_cache as clear_gender_cache
+    )
+    LLM_DETECTION_AVAILABLE = True
+except ImportError:
+    LLM_DETECTION_AVAILABLE = False
+    detect_gender_with_llm = None
+    is_llm_available = lambda: False
+    clear_gender_cache = lambda: None
 
 
 @dataclass
@@ -160,20 +175,27 @@ MALE_NAMES = {
 }
 
 
-def detect_gender(character_name: str, context: str = "") -> str:
+def detect_gender(character_name: str, context: str = "", full_text: str = "", use_llm: bool = True) -> str:
     """
     Detect likely gender of a character based on name and context.
+    
+    Args:
+        character_name: The character's name
+        context: The immediate attribution context (e.g., "said Mary")
+        full_text: The full story text (used for LLM analysis)
+        use_llm: Whether to use LLM-based detection if available
+        
     Returns: 'male', 'female', or 'neutral'
     """
     name_lower = character_name.lower().strip()
     
-    # Check known names
+    # Check known names first (fast path)
     if name_lower in FEMALE_NAMES:
         return "female"
     if name_lower in MALE_NAMES:
         return "male"
     
-    # Check context for pronouns
+    # Check context for pronouns (fast path)
     context_lower = context.lower()
     
     # Look for nearby gender indicators
@@ -186,6 +208,15 @@ def detect_gender(character_name: str, context: str = "") -> str:
         return "female"
     elif male_score > female_score:
         return "male"
+    
+    # If still neutral and LLM is available, use it for intelligent detection
+    if use_llm and LLM_DETECTION_AVAILABLE and is_llm_available() and full_text:
+        try:
+            gender, reasoning = detect_gender_with_llm(character_name, full_text)
+            logging.debug(f"LLM gender detection for '{character_name}': {gender} ({reasoning})")
+            return gender
+        except Exception as e:
+            logging.warning(f"LLM gender detection failed for '{character_name}': {e}")
     
     return "neutral"
 
@@ -225,7 +256,8 @@ class CharacterVoiceParser:
     def __init__(self, 
                  narrator_voice: str = DEFAULT_NARRATOR_VOICE,
                  narrator_style: str = DEFAULT_NARRATOR_STYLE,
-                 character_overrides: Dict[str, CharacterVoice] = None):
+                 character_overrides: Dict[str, CharacterVoice] = None,
+                 use_llm_detection: bool = True):
         """
         Initialize parser with optional character voice overrides.
         
@@ -233,12 +265,15 @@ class CharacterVoiceParser:
             narrator_voice: Voice for narration (non-dialogue)
             narrator_style: Default style for narration
             character_overrides: Dict mapping character names to CharacterVoice
+            use_llm_detection: Whether to use LLM for gender detection
         """
         self.narrator_voice = narrator_voice
         self.narrator_style = narrator_style
         self.character_overrides = character_overrides or {}
         self.character_cache: Dict[str, CharacterVoice] = {}
         self.voice_index = 0
+        self.use_llm_detection = use_llm_detection
+        self.full_text: str = ""  # Set when parsing
     
     def get_character_voice(self, character: str, context: str = "") -> CharacterVoice:
         """Get or create voice configuration for a character"""
@@ -252,8 +287,13 @@ class CharacterVoiceParser:
         if char_lower in self.character_cache:
             return self.character_cache[char_lower]
         
-        # Create new voice assignment
-        gender = detect_gender(character, context)
+        # Create new voice assignment with LLM-enhanced detection
+        gender = detect_gender(
+            character, 
+            context, 
+            full_text=self.full_text,
+            use_llm=self.use_llm_detection
+        )
         voice = get_voice_for_gender(gender, self.voice_index)
         self.voice_index += 1
         
@@ -262,6 +302,7 @@ class CharacterVoiceParser:
             gender=gender
         )
         self.character_cache[char_lower] = char_voice
+        logging.debug(f"Assigned voice for '{character}': {voice} (gender: {gender})")
         return char_voice
     
     def parse_dialogue(self, text: str) -> List[DialogueSegment]:
@@ -276,6 +317,9 @@ class CharacterVoiceParser:
         - The dragon laughed. "Hello!"
         - Princess Elena called, "Hello!"
         """
+        # Store full text for LLM-based gender detection
+        self.full_text = text
+        
         segments = []
         
         # Speech verbs for pattern matching (including actions that can precede dialogue)
@@ -496,7 +540,8 @@ class CharacterVoiceParser:
 def generate_character_ssml(text: str, 
                            narrator_voice: str = DEFAULT_NARRATOR_VOICE,
                            narrator_style: str = DEFAULT_NARRATOR_STYLE,
-                           character_overrides: Dict[str, Dict] = None) -> str:
+                           character_overrides: Dict[str, Dict] = None,
+                           use_llm_detection: bool = True) -> str:
     """
     Generate SSML with character voice expressions.
     
@@ -505,6 +550,7 @@ def generate_character_ssml(text: str,
         narrator_voice: Voice for narration
         narrator_style: Style for narration
         character_overrides: Dict of character name -> {voice, style, gender}
+        use_llm_detection: Whether to use LLM for intelligent gender detection
     
     Returns:
         SSML string with voice/style changes
@@ -522,7 +568,8 @@ def generate_character_ssml(text: str,
     parser = CharacterVoiceParser(
         narrator_voice=narrator_voice,
         narrator_style=narrator_style,
-        character_overrides=overrides
+        character_overrides=overrides,
+        use_llm_detection=use_llm_detection
     )
     
     segments = parser.parse_dialogue(text)

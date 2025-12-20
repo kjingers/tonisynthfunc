@@ -241,6 +241,32 @@ When `enable_character_voices` is true, the API:
 3. **Assigns voices** based on detected/inferred gender
 4. **Applies expressions** based on speech verbs (whispered, shouted, etc.)
 
+### Intelligent Gender Detection (LLM-Powered)
+
+When Azure OpenAI is configured, the API uses GPT-4o-mini to intelligently determine character genders:
+
+**How it works:**
+1. Extracts all character names from the story text
+2. Sends names and story context to Azure OpenAI
+3. Returns gender assignments based on:
+   - Name analysis (common associations)
+   - Pronouns used in the text
+   - Titles and roles (king/queen, prince/princess)
+   - Cultural and literary context
+4. Results are cached per story to avoid repeated API calls
+
+**Fallback Behavior:**
+- If Azure OpenAI is not configured, falls back to rule-based detection
+- Rule-based uses: predefined name lists, title patterns, pronoun detection
+- Unknown names default to "neutral" (alternating voices)
+
+**Required Environment Variables:**
+```bash
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
+AZURE_OPENAI_API_KEY=your-api-key
+AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
+```
+
 ### Custom Character Mappings
 
 Override automatic detection with custom mappings:
