@@ -1,7 +1,18 @@
-# Uncomment to enable Azure Monitor OpenTelemetry
+# Azure Functions dependencies (pinned versions)
 # Ref: aka.ms/functions-azure-monitor-python 
-# azure-monitor-opentelemetry 
+azure-functions==1.21.0
+azure-storage-blob==12.19.1
+requests==2.31.0
 
-azure-functions
-azure-storage-blob
-requests
+# Monitoring (uncomment to enable Azure Monitor)
+# azure-monitor-opentelemetry==1.2.0
+
+# Development and testing dependencies
+pytest==8.0.0
+pytest-cov==4.1.0
+
+# Type checking
+mypy==1.8.0
+
+# Code quality
+ruff==0.1.14

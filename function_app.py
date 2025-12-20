@@ -16,6 +16,8 @@ from story_config import (
 )
 from filename_utils import generate_synthesis_id, generate_filename_with_uuid
 from character_voices import generate_character_ssml, generate_simple_ssml
+from validators import is_adventure_mode_text, validate_batch_start_request, validate_synthesis_id
+from http_helpers import json_response, error_response, validation_error, not_found_error
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -35,8 +37,28 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
         voice_name = req_body.get('voice', DEFAULT_VOICE)  # Use config default
         style = req_body.get('style', DEFAULT_STYLE)  # Use config default
         
+        # Validate inputs
+        validation = validate_batch_start_request(
+            text=text,
+            voice=voice_name,
+            style=style
+        )
+        if not validation.is_valid:
+            return validation_error(validation.error, validation.field)
+        
         # NEW: Character voice expressions (optional)
-        enable_character_voices = req_body.get('enable_character_voices', ENABLE_CHARACTER_VOICES)
+        # Auto-detect adventure/story mode if not explicitly specified
+        enable_character_voices_param = req_body.get('enable_character_voices')
+        
+        if enable_character_voices_param is not None:
+            # User explicitly set the parameter
+            enable_character_voices = enable_character_voices_param
+            adventure_mode_auto_detected = False
+        else:
+            # Auto-detect based on text content
+            adventure_mode_auto_detected = is_adventure_mode_text(text)
+            enable_character_voices = adventure_mode_auto_detected or ENABLE_CHARACTER_VOICES
+        
         character_overrides = req_body.get('character_voices', CHARACTER_VOICE_OVERRIDES)
         
         if not text:
@@ -140,6 +162,7 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 "status_check_url": status_check_url,
                 "voice": voice_name,
                 "enable_character_voices": enable_character_voices,
+                "adventure_mode_auto_detected": adventure_mode_auto_detected,
                 "text_length": len(text),
                 "estimated_duration_minutes": len(text) / 1000 * 0.5,
                 "message": "Synthesis started. Audio URL will be available when complete (typically 1-3 min)."

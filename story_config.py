@@ -42,6 +42,15 @@ SAS_URL_EXPIRY_HOURS = 48  # How long the download link stays valid
 SYNTHESIS_TTL_HOURS = 24  # How long Azure keeps the synthesis job
 
 # ==========================================
+# Input Validation Settings
+# ==========================================
+
+# Text length limits
+MIN_TEXT_LENGTH = 1  # Minimum characters
+MAX_TEXT_LENGTH = 1000000  # Maximum for sync TTS
+MAX_BATCH_TEXT_LENGTH = 10000000  # Maximum for batch TTS (much larger stories)
+
+# ==========================================
 # Voice + Style Combinations
 # ==========================================
 
