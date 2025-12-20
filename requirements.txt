@@ -2,7 +2,7 @@
 # Ref: aka.ms/functions-azure-monitor-python 
 azure-functions==1.21.0
 azure-storage-blob==12.19.1
-requests==2.31.0
+requests==2.32.5
 
 # Monitoring (uncomment to enable Azure Monitor)
 # azure-monitor-opentelemetry==1.2.0
