@@ -91,6 +91,29 @@ STORY_PRESETS = {
 }
 
 # ==========================================
+# Character Voice Expressions (NEW!)
+# ==========================================
+
+# Enable automatic character voice detection
+# When True, parses dialogue and assigns different voices to characters
+# Female characters get female voices, male get male voices
+# Expressions like "whispered" or "shouted" apply appropriate styles
+ENABLE_CHARACTER_VOICES = False  # Set to True to enable by default
+
+# Custom character-to-voice mappings (optional)
+# Override automatic detection for specific characters
+CHARACTER_VOICE_OVERRIDES = {
+    # Example:
+    # "narrator": {"voice": "en-US-GuyNeural", "style": "friendly"},
+    # "princess": {"voice": "en-US-JennyNeural", "style": "cheerful", "gender": "female"},
+    # "dragon": {"voice": "en-US-DavisNeural", "style": "angry", "gender": "male"},
+}
+
+# Narrator settings (used for non-dialogue text)
+NARRATOR_VOICE = "en-US-GuyNeural"
+NARRATOR_STYLE = "friendly"
+
+# ==========================================
 # Custom Voice Support
 # ==========================================
 

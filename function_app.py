@@ -11,9 +11,11 @@ import zipfile
 import io
 from story_config import (
     DEFAULT_VOICE, DEFAULT_STYLE, OUTPUT_FORMAT, SAS_URL_EXPIRY_HOURS, SYNTHESIS_TTL_HOURS,
-    FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT
+    FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT, ENABLE_CHARACTER_VOICES,
+    CHARACTER_VOICE_OVERRIDES, NARRATOR_VOICE, NARRATOR_STYLE
 )
 from filename_utils import generate_synthesis_id, generate_filename_with_uuid
+from character_voices import generate_character_ssml, generate_simple_ssml
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -33,6 +35,10 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
         voice_name = req_body.get('voice', DEFAULT_VOICE)  # Use config default
         style = req_body.get('style', DEFAULT_STYLE)  # Use config default
         
+        # NEW: Character voice expressions (optional)
+        enable_character_voices = req_body.get('enable_character_voices', ENABLE_CHARACTER_VOICES)
+        character_overrides = req_body.get('character_voices', CHARACTER_VOICE_OVERRIDES)
+        
         if not text:
             return func.HttpResponse(
                 json.dumps({"error": "No text provided"}),
@@ -44,28 +50,24 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
         synthesis_id = generate_synthesis_id(text, FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT)
         audio_filename = f"{synthesis_id}.mp3"
         
-        logging.info(f'Starting batch synthesis: {synthesis_id}, {len(text)} chars')
+        logging.info(f'Starting batch synthesis: {synthesis_id}, {len(text)} chars, character_voices={enable_character_voices}')
         
         speech_key = os.environ['SPEECH_SERVICE_KEY']
         speech_region = os.environ['SPEECH_SERVICE_REGION']
         
-        # Create SSML with optional style support
-        if style:
-            # Use expressive style (e.g., 'cheerful', 'sad', 'gentle')
-            ssml = f"""<speak version='1.0' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='en-US'>
-                <voice name='{voice_name}'>
-                    <mstts:express-as style='{style}'>
-                        {text}
-                    </mstts:express-as>
-                </voice>
-            </speak>"""
+        # Generate SSML based on character voice setting
+        if enable_character_voices:
+            # Parse dialogue and assign voices/expressions to characters
+            ssml = generate_character_ssml(
+                text=text,
+                narrator_voice=voice_name or NARRATOR_VOICE,
+                narrator_style=style or NARRATOR_STYLE,
+                character_overrides=character_overrides
+            )
+            logging.info(f'Generated character voice SSML')
         else:
-            # Standard SSML
-            ssml = f"""<speak version='1.0' xml:lang='en-US'>
-                <voice xml:lang='en-US' name='{voice_name}'>
-                    {text}
-                </voice>
-            </speak>"""
+            # Original simple SSML generation
+            ssml = generate_simple_ssml(text, voice_name, style)
         
         # Use Batch Synthesis API (supports >10 min audio, async)
         batch_api_url = f"https://{speech_region}.api.cognitive.microsoft.com/texttospeech/batchsyntheses/{synthesis_id}"
@@ -137,6 +139,7 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 "audio_url": sas_url,  # Pre-signed URL - works once synthesis completes
                 "status_check_url": status_check_url,
                 "voice": voice_name,
+                "enable_character_voices": enable_character_voices,
                 "text_length": len(text),
                 "estimated_duration_minutes": len(text) / 1000 * 0.5,
                 "message": "Synthesis started. Audio URL will be available when complete (typically 1-3 min)."
@@ -355,6 +358,11 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
         req_body = req.get_json()
         text = req_body.get('text')
         voice_name = req_body.get('voice', 'en-US-GuyNeural')
+        style = req_body.get('style')
+        
+        # NEW: Character voice expressions (optional)
+        enable_character_voices = req_body.get('enable_character_voices', False)
+        character_overrides = req_body.get('character_voices', {})
         
         if not text:
             return func.HttpResponse(
@@ -387,11 +395,16 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
         # Standard TTS REST API
         synthesis_url = f"https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/v1"
         
-        ssml = f"""<speak version='1.0' xml:lang='en-US'>
-            <voice xml:lang='en-US' name='{voice_name}'>
-                {text}
-            </voice>
-        </speak>"""
+        # Generate SSML based on character voice setting
+        if enable_character_voices:
+            ssml = generate_character_ssml(
+                text=text,
+                narrator_voice=voice_name,
+                narrator_style=style,
+                character_overrides=character_overrides
+            )
+        else:
+            ssml = generate_simple_ssml(text, voice_name, style)
         
         headers = {
             'Ocp-Apim-Subscription-Key': speech_key,
