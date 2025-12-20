@@ -91,19 +91,53 @@ Synchronous TTS for short texts (returns audio directly).
 - **Speech**: Azure Cognitive Services Speech
 - **Storage**: Azure Blob Storage
 - **Hosting**: Azure Functions Consumption Plan
+- **Testing**: pytest with >80% coverage
+- **CI/CD**: GitHub Actions
 
 ## 📦 Project Structure
 
 ```
 tonisynthfunc/
-├── function_app.py          # Main Azure Functions code
-├── story_config.py          # Voice/style configuration
+├── function_app.py          # Main Azure Functions HTTP endpoints
+├── character_voices.py      # Dialogue parsing and voice assignment
+├── validators.py            # Input validation functions
+├── markdown_utils.py        # Markdown cleaning for TTS
+├── filename_utils.py        # Filename generation utilities
+├── story_config.py          # Voice/style configuration and presets
+├── http_helpers.py          # HTTP response helpers
+├── exceptions.py            # Custom exception classes
+├── logging_config.py        # Structured logging utilities
+├── azure_clients.py         # Azure service client creation
+├── storage_cleanup.py       # Storage cleanup utilities
 ├── requirements.txt         # Python dependencies
 ├── host.json                # Azure Functions host config
-├── local.settings.json      # Local dev settings (not in git)
-├── iOS_SHORTCUTS_SETUP.md   # iOS Shortcuts integration guide
-└── *.mp3                    # Sample audio files
+├── local.settings.json      # Local dev settings (gitignored)
+├── tests/                   # Unit tests (pytest)
+│   ├── test_character_voices.py
+│   ├── test_validators.py
+│   ├── test_markdown_utils.py
+│   └── ...
+├── .github/
+│   ├── workflows/ci-cd.yml  # CI/CD pipeline
+│   ├── copilot-instructions.md  # GitHub Copilot context
+│   ├── CODEOWNERS           # Code ownership
+│   ├── dependabot.yml       # Dependency updates
+│   └── ISSUE_TEMPLATE/      # Issue templates
+├── API_DOCUMENTATION.md     # Full API reference
+├── CONTRIBUTING.md          # Contribution guidelines
+└── iOS_SHORTCUTS_SETUP.md   # iOS Shortcuts integration
 ```
+
+## 🤖 GitHub Copilot Integration
+
+This repository is optimized for GitHub Copilot agent mode:
+
+- **`.github/copilot-instructions.md`** - Custom instructions for Copilot
+- **Issue templates** - Optimized for Copilot coding agent
+- **Clear code patterns** - Type hints, docstrings, and consistent structure
+- **Comprehensive tests** - 200+ tests for validation
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## 🚀 Deployment
 
@@ -165,9 +199,10 @@ To completely stop the function and avoid charges:
 
 ## 📄 Related Documentation
 
-- `iOS_SHORTCUTS_SETUP.md` - iOS Shortcuts setup guide
-- `BEDTIME_STORIES_GUIDE.md` - Original project guide
-- `FUNCTION_CHANGES.md` - Changelog
+- [API_DOCUMENTATION.md](API_DOCUMENTATION.md) - Complete API reference
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
+- [.github/copilot-instructions.md](.github/copilot-instructions.md) - Copilot context
+- [iOS_SHORTCUTS_SETUP.md](iOS_SHORTCUTS_SETUP.md) - iOS Shortcuts setup guide
 
 ## 📝 License
 

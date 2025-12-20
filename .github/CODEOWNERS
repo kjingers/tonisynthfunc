@@ -1,0 +1,26 @@
+# CODEOWNERS for ToniSynthFunc
+# These owners will be requested for review when someone opens a PR
+
+# Default owners for everything in the repo
+*       @kingersoll_microsoft
+
+# Core application code
+function_app.py         @kingersoll_microsoft
+character_voices.py     @kingersoll_microsoft
+validators.py           @kingersoll_microsoft
+markdown_utils.py       @kingersoll_microsoft
+
+# Configuration and infrastructure
+story_config.py         @kingersoll_microsoft
+*.yml                   @kingersoll_microsoft
+*.json                  @kingersoll_microsoft
+
+# Tests
+tests/                  @kingersoll_microsoft
+
+# Documentation
+*.md                    @kingersoll_microsoft
+API_DOCUMENTATION.md    @kingersoll_microsoft
+
+# GitHub configuration
+.github/                @kingersoll_microsoft
