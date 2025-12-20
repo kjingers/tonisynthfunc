@@ -145,6 +145,8 @@ FEMALE_NAMES = {
     'sarah', 'rachel', 'rebecca', 'ruth', 'esther', 'miriam', 'hannah', 'leah',
     'martha', 'maria', 'lucy', 'alice', 'rose', 'grace', 'lily', 'ella',
     'mom', 'mommy', 'mother', 'grandmother', 'grandma', 'princess', 'queen',
+    'elena', 'aurora', 'belle', 'cinderella', 'ariel', 'elsa', 'anna',
+    'she', 'her', 'witch', 'fairy', 'goddess',
 }
 
 # Common male names
@@ -153,7 +155,8 @@ MALE_NAMES = {
     'charles', 'daniel', 'matthew', 'anthony', 'mark', 'paul', 'peter', 'luke',
     'adam', 'noah', 'abraham', 'moses', 'jacob', 'isaac', 'samuel', 'joshua',
     'dad', 'daddy', 'father', 'grandfather', 'grandpa', 'prince', 'king',
-    'jesus', 'god', 'lord',
+    'jesus', 'god', 'lord', 'sir', 'cedric', 'arthur', 'lancelot', 'merlin',
+    'he', 'him', 'dragon', 'wizard', 'knight', 'giant', 'troll', 'ogre',
 }
 
 
@@ -270,25 +273,107 @@ class CharacterVoiceParser:
         - "Hello," Mary said.
         - "Hello!" she exclaimed.
         - Mary said, "Hello."
+        - The dragon laughed. "Hello!"
+        - Princess Elena called, "Hello!"
         """
         segments = []
         
+        # Speech verbs for pattern matching (including actions that can precede dialogue)
+        speech_verbs = r'(?:said|asked|replied|whispered|shouted|exclaimed|cried|yelled|murmured|muttered|declared|called|laughed|roared|growled|hissed|screamed|bellowed|demanded|answered|responded|snapped|snarled|cooed|sighed|smiled|grinned|frowned|nodded)'
+        
         # Pattern for dialogue with attribution after
         # Matches: "dialogue" [attribution with speaker]
-        pattern_after = r'"([^"]+)"[\s,]*([^"]+?)(?="|$|\n\n)'
+        pattern_after = r'"([^"]+)"[\s,]*([^"]*?)(?="|$|\n\n|\n[A-Z])'
         
-        # Pattern for dialogue with attribution before
-        # Matches: [speaker] said, "dialogue"
-        pattern_before = r'(\b\w+\b)\s+(?:said|asked|replied|whispered|shouted|exclaimed|cried|yelled|murmured|muttered),?\s*"([^"]+)"'
+        # Pattern for dialogue with attribution before (with comma before quote)
+        # Matches: [speaker] said/called/etc, "dialogue"
+        # Handles: "Princess Elena called from the tower, \"dialogue\""
+        pattern_before_comma = rf'((?:Sir|Lord|Lady|King|Queen|Prince|Princess|The|Dr|Mr|Mrs|Ms)\s+[A-Z][a-z]+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+{speech_verbs}[^"]*,\s*"([^"]+)"'
+        
+        # Pattern for dialogue with attribution before (direct)
+        # Matches: [speaker] said "dialogue"
+        pattern_before_direct = rf'((?:Sir|Lord|Lady|King|Queen|Prince|Princess|The|Dr|Mr|Mrs|Ms)\s+[A-Z][a-z]+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+{speech_verbs}\s*"([^"]+)"'
+        
+        # Pattern for action then dialogue (sentence boundary)
+        # Matches: "[Someone] [action]. "dialogue""
+        # E.g., "The dragon laughed menacingly. \"You shall not pass!\""
+        # Requires the character to perform a speech-related action (laughed, smiled, etc.)
+        # The action must be followed by period, then dialogue
+        action_verbs = r'(?:laughed|smiled|grinned|frowned|nodded|sighed|growled|roared|hissed|snarled|chuckled|giggled|snickered|cackled|bellowed|thundered|boomed)'
+        pattern_action_dialogue = rf'(The\s+[a-z]+|[A-Z][a-z]+)\s+{action_verbs}[^"\.]*\.\s*"([^"]+)"'
         
         # Split text into chunks, preserving structure
         last_end = 0
         matches = []
         
-        # Find all dialogue with attribution after
+        # IMPORTANT: Process more specific patterns FIRST to get proper character attribution
+        # Then use generic pattern_after only for remaining unmatched dialogue
+        
+        # 1. Find dialogue with attribution before (comma style)
+        # E.g., "Princess Elena called from the tower, "dialogue""
+        for match in re.finditer(pattern_before_comma, text, re.DOTALL):
+            character = match.group(1)
+            dialogue = match.group(2)
+            
+            matches.append({
+                'start': match.start(),
+                'end': match.end(),
+                'dialogue': dialogue,
+                'attribution': f"{character} said",
+                'character': character,
+                'expression': None,
+            })
+        
+        # 2. Find dialogue with attribution before (direct style)
+        # E.g., "Mary said "dialogue""
+        for match in re.finditer(pattern_before_direct, text, re.DOTALL):
+            character = match.group(1)
+            dialogue = match.group(2)
+            
+            # Skip if overlaps with existing match
+            if any(m['start'] <= match.start() < m['end'] or 
+                   match.start() <= m['start'] < match.end() for m in matches):
+                continue
+            
+            matches.append({
+                'start': match.start(),
+                'end': match.end(),
+                'dialogue': dialogue,
+                'attribution': f"{character} said",
+                'character': character,
+                'expression': None,
+            })
+        
+        # 3. Find action-then-dialogue patterns
+        # E.g., "The dragon laughed menacingly. "dialogue""
+        for match in re.finditer(pattern_action_dialogue, text, re.DOTALL):
+            character = match.group(1)
+            dialogue = match.group(2)
+            
+            # Skip if overlaps with existing match
+            if any(m['start'] <= match.start() < m['end'] or 
+                   match.start() <= m['start'] < match.end() for m in matches):
+                continue
+            
+            matches.append({
+                'start': match.start(),
+                'end': match.end(),
+                'dialogue': dialogue,
+                'attribution': f"{character}",
+                'character': character,
+                'expression': None,
+            })
+        
+        # 4. LAST: Find remaining dialogue with attribution after (generic fallback)
+        # E.g., "dialogue" said Mary. or "dialogue" she whispered.
         for match in re.finditer(pattern_after, text, re.DOTALL):
             dialogue = match.group(1)
             attribution = match.group(2).strip()
+            
+            # Skip if this dialogue was already matched by a more specific pattern
+            if any(m['start'] <= match.start() < m['end'] or 
+                   match.start() <= m['start'] < match.end() for m in matches):
+                continue
             
             # Extract character name from attribution
             character = self._extract_character(attribution)
@@ -301,24 +386,6 @@ class CharacterVoiceParser:
                 'attribution': attribution,
                 'character': character,
                 'expression': expression,
-            })
-        
-        # Find dialogue with attribution before
-        for match in re.finditer(pattern_before, text, re.DOTALL):
-            character = match.group(1)
-            dialogue = match.group(2)
-            
-            # Skip if overlaps with existing match
-            if any(m['start'] <= match.start() < m['end'] for m in matches):
-                continue
-            
-            matches.append({
-                'start': match.start(),
-                'end': match.end(),
-                'dialogue': dialogue,
-                'attribution': f"{character} said",
-                'character': character,
-                'expression': None,
             })
         
         # Sort matches by position
@@ -390,14 +457,30 @@ class CharacterVoiceParser:
     def _extract_character(self, attribution: str) -> Optional[str]:
         """Extract character name from dialogue attribution"""
         # Common patterns: "said Mary", "Mary said", "she whispered"
+        # Also handles: "Sir Cedric declared", "The dragon laughed", "Princess Elena called"
         
-        # Try to find name before verb
-        match = re.search(r'^(\b[A-Z][a-z]+\b)', attribution)
+        # Speech verbs for pattern matching
+        speech_verbs = r'(?:said|asked|replied|whispered|shouted|exclaimed|cried|yelled|murmured|muttered|declared|called|laughed|roared|growled|hissed|screamed|bellowed|demanded|answered|responded|snapped|snarled|cooed|sighed)'
+        
+        # Try to find multi-word name before verb (e.g., "Sir Cedric declared", "The dragon laughed")
+        # Match: Title/The + Name + verb, or Name Name + verb
+        match = re.search(rf'^((?:Sir|Lord|Lady|King|Queen|Prince|Princess|The|Dr|Mr|Mrs|Ms)\s+[A-Z][a-z]+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+{speech_verbs}', attribution)
+        if match:
+            return match.group(1).strip()
+        
+        # Try single capitalized name before verb (e.g., "Mary said")
+        match = re.search(rf'^([A-Z][a-z]+)\s+{speech_verbs}', attribution)
         if match:
             return match.group(1)
         
-        # Try to find name after verb
-        match = re.search(r'\b(?:said|asked|replied|whispered|shouted|exclaimed)\s+(\b[A-Z][a-z]+\b)', attribution)
+        # Try to find name after verb (e.g., "said Sir Cedric", "said Mary", "replied the knight")
+        # Handles both capitalized names and "the [role]" patterns
+        match = re.search(rf'{speech_verbs}\s+((?:Sir|Lord|Lady|King|Queen|Prince|Princess|The|Dr|Mr|Mrs|Ms)\s+[A-Z][a-z]+|the\s+[a-z]+|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)', attribution, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+        
+        # Try single name after verb
+        match = re.search(rf'{speech_verbs}\s+([A-Z][a-z]+)', attribution)
         if match:
             return match.group(1)
         
