@@ -21,13 +21,13 @@ FILENAME_AI_MAX_TOKENS = 10
 # Default voice for bedtime stories
 # See full list: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts
 # DEFAULT_VOICE = "en-US-AriaNeural"  # Expressive female voice with style support
-DEFAULT_VOICE = "en-US-GuyNeural"  # Male voice - great for Bible stories & narration
+DEFAULT_VOICE = "en-US-Jimmie:DragonHDFlashLatestNeural"  # HD male voice - highly natural, contextually expressive
 
 # Optional: Set a default speaking style
 # Available styles depend on the voice - see below
-# Set to None to use normal speaking style
+# Set to None to use normal speaking style (required for Dragon HD voices, which are contextually expressive)
 # DEFAULT_STYLE = "friendly"  # Best for bedtime - warm, calm, soothing
-DEFAULT_STYLE = "hopeful"  # Best for Bible stories - warm, positive, faith-filled tone
+DEFAULT_STYLE = None  # Dragon HD voices do not use mstts:express-as style tags
 
 # Audio quality settings
 OUTPUT_FORMAT = "audio-24khz-96kbitrate-mono-mp3"  # Good balance of quality and file size
@@ -119,8 +119,8 @@ CHARACTER_VOICE_OVERRIDES = {
 }
 
 # Narrator settings (used for non-dialogue text)
-NARRATOR_VOICE = "en-US-GuyNeural"
-NARRATOR_STYLE = "friendly"
+NARRATOR_VOICE = "en-US-Jimmie:DragonHDFlashLatestNeural"
+NARRATOR_STYLE = None
 
 # ==========================================
 # Custom Voice Support

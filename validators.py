@@ -87,12 +87,12 @@ def validate_voice(voice: Optional[str]) -> ValidationResult:
     if not voice:
         return ValidationResult.valid()  # Optional field
     
-    # Voice format: en-US-AriaNeural, etc.
-    pattern = r'^[a-z]{2,3}-[A-Z]{2}-\w+Neural$'
-    
+    # Voice format: en-US-AriaNeural or en-US-Jimmie:DragonHDFlashLatestNeural
+    pattern = r'^[a-z]{2,3}-[A-Z]{2}-[\w:]+Neural$'
+
     if not re.match(pattern, voice):
         return ValidationResult.invalid(
-            f"Invalid voice format: {voice}. Expected format: 'en-US-VoiceNameNeural'",
+            f"Invalid voice format: {voice}. Expected format: 'en-US-VoiceNameNeural' or 'en-US-Name:DragonHDFlashLatestNeural'",
             "voice"
         )
     
