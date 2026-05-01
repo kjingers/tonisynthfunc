@@ -388,7 +388,7 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
     try:
         req_body = req.get_json()
         text = req_body.get('text')
-        voice_name = req_body.get('voice', 'en-US-GuyNeural')
+        voice_name = req_body.get('voice', DEFAULT_VOICE)
         style = req_body.get('style')
         
         # NEW: Character voice expressions (optional)
