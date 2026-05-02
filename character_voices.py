@@ -10,6 +10,16 @@ Enable with: enable_character_voices=True in API request
 import logging
 import re
 from dataclasses import dataclass
+from typing import TypedDict
+
+
+class _MatchInfo(TypedDict):
+    start: int
+    end: int
+    dialogue: str
+    attribution: str
+    character: str | None
+    expression: str | None
 
 # Import LLM-based gender detection (optional feature)
 try:
@@ -18,10 +28,10 @@ try:
     LLM_DETECTION_AVAILABLE = True
 except ImportError:
     LLM_DETECTION_AVAILABLE = False
-    detect_gender_with_llm = None
-    def is_llm_available():
+    detect_gender_with_llm = None  # type: ignore[assignment]
+    def is_llm_available() -> bool:
         return False
-    def clear_gender_cache():
+    def clear_gender_cache() -> None:
         return None
 
 
@@ -252,8 +262,8 @@ class CharacterVoiceParser:
 
     def __init__(self,
                  narrator_voice: str = DEFAULT_NARRATOR_VOICE,
-                 narrator_style: str = DEFAULT_NARRATOR_STYLE,
-                 character_overrides: dict[str, CharacterVoice] = None,
+                 narrator_style: str | None = DEFAULT_NARRATOR_STYLE,
+                 character_overrides: dict[str, CharacterVoice] | None = None,
                  use_llm_detection: bool = True):
         """
         Initialize parser with optional character voice overrides.
@@ -345,7 +355,7 @@ class CharacterVoiceParser:
 
         # Split text into chunks, preserving structure
         last_end = 0
-        matches = []
+        matches: list[_MatchInfo] = []
 
         # IMPORTANT: Process more specific patterns FIRST to get proper character attribution
         # Then use generic pattern_after only for remaining unmatched dialogue
@@ -433,10 +443,10 @@ class CharacterVoiceParser:
         matches.sort(key=lambda x: x['start'])
 
         # Build segments
-        for match in matches:
+        for seg in matches:
             # Add narration before this dialogue
-            if match['start'] > last_end:
-                narration = text[last_end:match['start']].strip()
+            if seg['start'] > last_end:
+                narration = text[last_end:seg['start']].strip()
                 if narration:
                     segments.append(DialogueSegment(
                         text=narration,
@@ -446,23 +456,23 @@ class CharacterVoiceParser:
                     ))
 
             # Add dialogue segment
-            character = match['character']
+            character = seg['character']
             if character:
-                char_voice = self.get_character_voice(character, match['attribution'])
+                char_voice = self.get_character_voice(character, seg['attribution'])
                 voice = char_voice.voice_name
             else:
                 voice = self.narrator_voice
 
             segments.append(DialogueSegment(
-                text=match['dialogue'],
+                text=seg['dialogue'],
                 voice_name=voice,
-                style=match['expression'] or char_voice.default_style if character else None,
+                style=seg['expression'] or char_voice.default_style if character else None,
                 is_dialogue=True,
                 character=character
             ))
 
             # Add attribution as narration if substantial
-            attr_text = match['attribution'].strip()
+            attr_text = seg['attribution'].strip()
             if attr_text and len(attr_text) > 20:
                 segments.append(DialogueSegment(
                     text=attr_text,
@@ -471,7 +481,7 @@ class CharacterVoiceParser:
                     is_dialogue=False
                 ))
 
-            last_end = match['end']
+            last_end = seg['end']
 
         # Add remaining narration
         if last_end < len(text):
@@ -536,8 +546,8 @@ class CharacterVoiceParser:
 
 def generate_character_ssml(text: str,
                            narrator_voice: str = DEFAULT_NARRATOR_VOICE,
-                           narrator_style: str = DEFAULT_NARRATOR_STYLE,
-                           character_overrides: dict[str, dict] = None,
+                           narrator_style: str | None = DEFAULT_NARRATOR_STYLE,
+                           character_overrides: dict[str, dict] | None = None,
                            use_llm_detection: bool = True) -> str:
     """
     Generate SSML with character voice expressions.
