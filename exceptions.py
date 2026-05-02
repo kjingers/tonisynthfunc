@@ -7,13 +7,13 @@ Defines application-specific exceptions for better error handling.
 
 class ToniSynthError(Exception):
     """Base exception for ToniSynth application"""
-    
+
     def __init__(self, message: str, error_code: str = None, details: str = None):
         super().__init__(message)
         self.message = message
         self.error_code = error_code or "UNKNOWN_ERROR"
         self.details = details
-    
+
     def to_dict(self) -> dict:
         """Convert exception to dictionary for JSON response"""
         result = {
@@ -27,7 +27,7 @@ class ToniSynthError(Exception):
 
 class ConfigurationError(ToniSynthError):
     """Raised when configuration is missing or invalid"""
-    
+
     def __init__(self, message: str, missing_vars: list = None):
         super().__init__(
             message=message,
@@ -39,14 +39,14 @@ class ConfigurationError(ToniSynthError):
 
 class ValidationError(ToniSynthError):
     """Raised when input validation fails"""
-    
+
     def __init__(self, message: str, field: str = None):
         super().__init__(
             message=message,
             error_code="VALIDATION_ERROR"
         )
         self.field = field
-    
+
     def to_dict(self) -> dict:
         result = super().to_dict()
         if self.field:
@@ -56,7 +56,7 @@ class ValidationError(ToniSynthError):
 
 class SpeechServiceError(ToniSynthError):
     """Raised when Azure Speech Service API call fails"""
-    
+
     def __init__(self, message: str, status_code: int = None, api_response: str = None):
         super().__init__(
             message=message,
@@ -69,14 +69,14 @@ class SpeechServiceError(ToniSynthError):
 
 class StorageError(ToniSynthError):
     """Raised when Azure Blob Storage operation fails"""
-    
+
     def __init__(self, message: str, blob_name: str = None, operation: str = None):
         details = []
         if blob_name:
             details.append(f"blob: {blob_name}")
         if operation:
             details.append(f"operation: {operation}")
-        
+
         super().__init__(
             message=message,
             error_code="STORAGE_ERROR",
@@ -88,7 +88,7 @@ class StorageError(ToniSynthError):
 
 class SynthesisNotFoundError(ToniSynthError):
     """Raised when a synthesis job is not found"""
-    
+
     def __init__(self, synthesis_id: str):
         super().__init__(
             message=f"Synthesis job '{synthesis_id}' not found",
@@ -99,7 +99,7 @@ class SynthesisNotFoundError(ToniSynthError):
 
 class SynthesisFailedError(ToniSynthError):
     """Raised when a synthesis job fails"""
-    
+
     def __init__(self, synthesis_id: str, reason: str = None):
         super().__init__(
             message=f"Synthesis job '{synthesis_id}' failed",
@@ -112,7 +112,7 @@ class SynthesisFailedError(ToniSynthError):
 
 class SynthesisTimeoutError(ToniSynthError):
     """Raised when synthesis job times out"""
-    
+
     def __init__(self, synthesis_id: str, timeout_seconds: int):
         super().__init__(
             message=f"Synthesis job '{synthesis_id}' timed out after {timeout_seconds} seconds",
@@ -124,7 +124,7 @@ class SynthesisTimeoutError(ToniSynthError):
 
 class TextTooLongError(ValidationError):
     """Raised when text exceeds maximum length"""
-    
+
     def __init__(self, text_length: int, max_length: int):
         super().__init__(
             message=f"Text length ({text_length}) exceeds maximum ({max_length})",
@@ -137,12 +137,12 @@ class TextTooLongError(ValidationError):
 
 class RateLimitError(ToniSynthError):
     """Raised when rate limit is exceeded"""
-    
+
     def __init__(self, retry_after: int = None):
         message = "Rate limit exceeded"
         if retry_after:
             message += f". Retry after {retry_after} seconds"
-        
+
         super().__init__(
             message=message,
             error_code="RATE_LIMIT_EXCEEDED"

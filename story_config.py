@@ -57,7 +57,7 @@ MAX_BATCH_TEXT_LENGTH = 10000000  # Maximum for batch TTS (much larger stories)
 # Voices with Multiple Styles (Best for Stories):
 VOICE_STYLES = {
     "en-US-AriaNeural": [
-        "angry", "cheerful", "excited", "friendly", "hopeful", 
+        "angry", "cheerful", "excited", "friendly", "hopeful",
         "sad", "shouting", "terrified", "unfriendly", "whispering"
     ],
     "en-US-DavisNeural": [

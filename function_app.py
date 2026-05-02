@@ -1,24 +1,32 @@
-import azure.functions as func
-import logging
-import json
-import os
-import uuid
-import time
-from datetime import datetime, timedelta
-from azure.storage.blob import BlobServiceClient, generate_blob_sas, BlobSasPermissions
-import requests
-import zipfile
 import io
-from story_config import (
-    DEFAULT_VOICE, DEFAULT_STYLE, OUTPUT_FORMAT, SAS_URL_EXPIRY_HOURS, SYNTHESIS_TTL_HOURS,
-    FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT, ENABLE_CHARACTER_VOICES,
-    CHARACTER_VOICE_OVERRIDES, NARRATOR_VOICE, NARRATOR_STYLE
-)
-from filename_utils import generate_synthesis_id, generate_filename_with_uuid
+import json
+import logging
+import os
+import zipfile
+from datetime import datetime, timedelta
+
+import azure.functions as func
+import requests
+from azure.storage.blob import BlobSasPermissions, BlobServiceClient, generate_blob_sas
+
 from character_voices import generate_character_ssml, generate_simple_ssml
-from validators import is_adventure_mode_text, validate_batch_start_request, validate_synthesis_id
-from http_helpers import json_response, error_response, validation_error, not_found_error
+from filename_utils import generate_filename_with_uuid, generate_synthesis_id
+from http_helpers import validation_error
 from markdown_utils import clean_markdown_for_speech
+from story_config import (
+    CHARACTER_VOICE_OVERRIDES,
+    DEFAULT_STYLE,
+    DEFAULT_VOICE,
+    ENABLE_CHARACTER_VOICES,
+    FILENAME_MAX_LENGTH,
+    FILENAME_WORD_COUNT,
+    NARRATOR_STYLE,
+    NARRATOR_VOICE,
+    OUTPUT_FORMAT,
+    SAS_URL_EXPIRY_HOURS,
+    SYNTHESIS_TTL_HOURS,
+)
+from validators import is_adventure_mode_text, validate_batch_start_request
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -31,13 +39,13 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.info('Route hit: batch-start')
     logging.info('Start synthesis function triggered')
-    
+
     try:
         req_body = req.get_json()
         text = req_body.get('text')
         voice_name = req_body.get('voice', DEFAULT_VOICE)  # Use config default
         style = req_body.get('style', DEFAULT_STYLE)  # Use config default
-        
+
         # Validate inputs
         validation = validate_batch_start_request(
             text=text,
@@ -46,17 +54,17 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
         )
         if not validation.is_valid:
             return validation_error(validation.error, validation.field)
-        
+
         # Clean markdown formatting from text for better speech synthesis
         # This removes tables, converts bullets to plain text, etc.
         original_length = len(text) if text else 0
         text = clean_markdown_for_speech(text)
         markdown_cleaned = len(text) != original_length if text else False
-        
+
         # NEW: Character voice expressions (optional)
         # Auto-detect adventure/story mode if not explicitly specified
         enable_character_voices_param = req_body.get('enable_character_voices')
-        
+
         if enable_character_voices_param is not None:
             # User explicitly set the parameter
             enable_character_voices = enable_character_voices_param
@@ -65,25 +73,25 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
             # Auto-detect based on text content
             adventure_mode_auto_detected = is_adventure_mode_text(text)
             enable_character_voices = adventure_mode_auto_detected or ENABLE_CHARACTER_VOICES
-        
+
         character_overrides = req_body.get('character_voices', CHARACTER_VOICE_OVERRIDES)
-        
+
         if not text:
             return func.HttpResponse(
                 json.dumps({"error": "No text provided"}),
                 status_code=400,
                 mimetype="application/json"
             )
-        
+
         # Generate descriptive synthesis ID and filename based on text content
         synthesis_id = generate_synthesis_id(text, FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT)
         audio_filename = f"{synthesis_id}.mp3"
-        
+
         logging.info(f'Starting batch synthesis: {synthesis_id}, {len(text)} chars, character_voices={enable_character_voices}, markdown_cleaned={markdown_cleaned}')
-        
+
         speech_key = os.environ['SPEECH_SERVICE_KEY']
         speech_region = os.environ['SPEECH_SERVICE_REGION']
-        
+
         # Generate SSML based on character voice setting
         if enable_character_voices:
             # Parse dialogue and assign voices/expressions to characters
@@ -93,14 +101,14 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 narrator_style=style or NARRATOR_STYLE,
                 character_overrides=character_overrides
             )
-            logging.info(f'Generated character voice SSML')
+            logging.info('Generated character voice SSML')
         else:
             # Original simple SSML generation
             ssml = generate_simple_ssml(text, voice_name, style)
-        
+
         # Use Batch Synthesis API (supports >10 min audio, async)
         batch_api_url = f"https://{speech_region}.api.cognitive.microsoft.com/texttospeech/batchsyntheses/{synthesis_id}"
-        
+
         batch_request = {
             "description": f"Bedtime story {datetime.now().isoformat()}",
             "inputKind": "SSML",
@@ -111,18 +119,18 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 "timeToLiveInHours": SYNTHESIS_TTL_HOURS
             }
         }
-        
+
         headers = {
             'Ocp-Apim-Subscription-Key': speech_key,
             'Content-Type': 'application/json'
         }
-        
+
         response = requests.put(
             f"{batch_api_url}?api-version=2024-04-01",
             headers=headers,
             json=batch_request
         )
-        
+
         if response.status_code not in [200, 201]:
             logging.error(f"Batch synthesis failed: {response.status_code} - {response.text}")
             return func.HttpResponse(
@@ -134,18 +142,18 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
                 status_code=500,
                 mimetype="application/json"
             )
-        
+
         job_info = response.json()
         logging.info(f"Batch synthesis created: {synthesis_id}, status: {job_info.get('status')}")
-        
+
         # Generate pre-signed SAS URL (like AWS S3 pre-signed URL)
-        blob_service_client = BlobServiceClient(
+        BlobServiceClient(
             account_url=f"https://{os.environ['STORAGE_ACCOUNT_NAME']}.blob.core.windows.net",
             credential=os.environ['STORAGE_ACCOUNT_KEY']
         )
-        
+
         container_name = os.environ.get('STORAGE_CONTAINER_NAME', 'audio-files')
-        
+
         # SAS URL valid for configured hours
         sas_token = generate_blob_sas(
             account_name=os.environ['STORAGE_ACCOUNT_NAME'],
@@ -155,12 +163,12 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
             permission=BlobSasPermissions(read=True),
             expiry=datetime.utcnow() + timedelta(hours=SAS_URL_EXPIRY_HOURS)
         )
-        
+
         sas_url = f"https://{os.environ['STORAGE_ACCOUNT_NAME']}.blob.core.windows.net/{container_name}/{audio_filename}?{sas_token}"
-        
+
         # Status check URL
         status_check_url = f"https://{req.url.split('/api/')[0]}/api/check-synthesis?synthesis_id={synthesis_id}"
-        
+
         return func.HttpResponse(
             json.dumps({
                 "status": "started",
@@ -178,7 +186,7 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
             status_code=200,
             mimetype="application/json"
         )
-        
+
     except Exception as e:
         logging.error(f"Error in start_synthesis: {str(e)}", exc_info=True)
         return func.HttpResponse(
@@ -197,46 +205,46 @@ def batch_check(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.info('Route hit: batch-check')
     logging.info('Check synthesis function triggered')
-    
+
     try:
         synthesis_id = req.params.get('synthesis_id')
-        
+
         if not synthesis_id:
             return func.HttpResponse(
                 json.dumps({"error": "synthesis_id parameter required"}),
                 status_code=400,
                 mimetype="application/json"
             )
-        
+
         speech_key = os.environ['SPEECH_SERVICE_KEY']
         speech_region = os.environ['SPEECH_SERVICE_REGION']
-        
+
         batch_api_url = f"https://{speech_region}.api.cognitive.microsoft.com/texttospeech/batchsyntheses/{synthesis_id}"
-        
+
         headers = {'Ocp-Apim-Subscription-Key': speech_key}
-        
+
         # Poll for up to 3 minutes (18 attempts x 10 seconds)
         max_attempts = 18
         poll_interval = 10  # seconds
-        
+
         for attempt in range(max_attempts):
             if attempt > 0:
                 import time
                 logging.info(f"Polling attempt {attempt + 1}/{max_attempts}, waiting {poll_interval}s...")
                 time.sleep(poll_interval)
-            
+
             response = requests.get(
                 f"{batch_api_url}?api-version=2024-04-01",
                 headers=headers
             )
-            
+
             if response.status_code == 404:
                 return func.HttpResponse(
                     json.dumps({"error": "Synthesis job not found", "synthesis_id": synthesis_id}),
                     status_code=404,
                     mimetype="application/json"
                 )
-            
+
             if response.status_code != 200:
                 return func.HttpResponse(
                     json.dumps({
@@ -247,16 +255,16 @@ def batch_check(req: func.HttpRequest) -> func.HttpResponse:
                     status_code=500,
                     mimetype="application/json"
                 )
-            
+
             job_status = response.json()
             status = job_status.get('status')
-            
+
             logging.info(f"Synthesis {synthesis_id} status: {status} (attempt {attempt + 1})")
-            
+
             # Still processing - continue polling
             if status in ['Running', 'NotStarted']:
                 continue
-            
+
             # Failed
             if status == 'Failed':
                 error_details = job_status.get('properties', {}).get('failureReason', 'Unknown error')
@@ -269,61 +277,61 @@ def batch_check(req: func.HttpRequest) -> func.HttpResponse:
                     status_code=500,
                     mimetype="application/json"
                 )
-            
+
             # Succeeded - download and upload to blob
             if status == 'Succeeded':
                 outputs = job_status.get('outputs', {})
                 result_url = outputs.get('result')
-                
+
                 if not result_url:
                     return func.HttpResponse(
                         json.dumps({"error": "No result URL in successful job"}),
                         status_code=500,
                         mimetype="application/json"
                     )
-                
+
                 # Download ZIP file
                 logging.info(f"Downloading results from: {result_url}")
                 zip_response = requests.get(result_url, headers=headers)
-                
+
                 if zip_response.status_code != 200:
                     return func.HttpResponse(
                         json.dumps({"error": "Failed to download synthesis results"}),
                         status_code=500,
                         mimetype="application/json"
                     )
-                
+
                 # Extract audio from ZIP
                 zip_data = io.BytesIO(zip_response.content)
                 with zipfile.ZipFile(zip_data, 'r') as zip_ref:
                     audio_files = [f for f in zip_ref.namelist() if f.endswith(('.mp3', '.wav'))]
-                    
+
                     if not audio_files:
                         return func.HttpResponse(
                             json.dumps({"error": "No audio file found in results"}),
                             status_code=500,
                             mimetype="application/json"
                         )
-                    
+
                     audio_data = zip_ref.read(audio_files[0])
                     logging.info(f"Extracted audio: {audio_files[0]}, {len(audio_data)} bytes")
-                
+
                 # Upload to blob storage
                 audio_filename = f"{synthesis_id}.mp3"
                 blob_service_client = BlobServiceClient(
                     account_url=f"https://{os.environ['STORAGE_ACCOUNT_NAME']}.blob.core.windows.net",
                     credential=os.environ['STORAGE_ACCOUNT_KEY']
                 )
-                
+
                 container_name = os.environ.get('STORAGE_CONTAINER_NAME', 'audio-files')
                 blob_client = blob_service_client.get_blob_client(
                     container=container_name,
                     blob=audio_filename
                 )
-                
+
                 blob_client.upload_blob(audio_data, overwrite=True)
                 logging.info(f"Uploaded to blob storage: {audio_filename}")
-                
+
                 # Generate SAS URL
                 sas_token = generate_blob_sas(
                     account_name=os.environ['STORAGE_ACCOUNT_NAME'],
@@ -333,13 +341,13 @@ def batch_check(req: func.HttpRequest) -> func.HttpResponse:
                     permission=BlobSasPermissions(read=True),
                     expiry=datetime.utcnow() + timedelta(hours=48)
                 )
-                
+
                 sas_url = f"https://{os.environ['STORAGE_ACCOUNT_NAME']}.blob.core.windows.net/{container_name}/{audio_filename}?{sas_token}"
-                
+
                 properties = job_status.get('properties', {})
                 duration_ms = properties.get('durationInMilliseconds', 0)
                 size_bytes = properties.get('sizeInBytes', len(audio_data))
-                
+
                 return func.HttpResponse(
                     json.dumps({
                         "status": "completed",
@@ -352,7 +360,7 @@ def batch_check(req: func.HttpRequest) -> func.HttpResponse:
                     status_code=200,
                     mimetype="application/json"
                 )
-            
+
             # Unknown status - continue polling
             logging.warning(f"Unknown status: {status}, continuing to poll...")
             continue        # Timeout - synthesis took too long
@@ -366,7 +374,7 @@ def batch_check(req: func.HttpRequest) -> func.HttpResponse:
             status_code=408,
             mimetype="application/json"
         )
-        
+
     except Exception as e:
         logging.error(f"Error in check_synthesis: {str(e)}", exc_info=True)
         return func.HttpResponse(
@@ -384,27 +392,27 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
     """
     logging.info('Route hit: sync-tts')
     logging.info('Legacy tonieboxsynthesize endpoint called')
-    
+
     try:
         req_body = req.get_json()
         text = req_body.get('text')
         voice_name = req_body.get('voice', DEFAULT_VOICE)
         style = req_body.get('style')
-        
+
         # NEW: Character voice expressions (optional)
         enable_character_voices = req_body.get('enable_character_voices', False)
         character_overrides = req_body.get('character_voices', {})
-        
+
         if not text:
             return func.HttpResponse(
                 json.dumps({"error": "No text provided"}),
                 status_code=400,
                 mimetype="application/json"
             )
-        
+
         # Clean markdown formatting from text for better speech synthesis
         text = clean_markdown_for_speech(text)
-        
+
         # Redirect long texts to batch API
         if len(text) > 5000:
             return func.HttpResponse(
@@ -417,18 +425,18 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
                 status_code=400,
                 mimetype="application/json"
             )
-        
+
         logging.info(f'Synchronous synthesis: {len(text)} chars')
-        
+
         speech_key = os.environ['SPEECH_SERVICE_KEY']
         speech_region = os.environ['SPEECH_SERVICE_REGION']
-        
+
         # Generate descriptive filename based on text content
         audio_filename = generate_filename_with_uuid(text, FILENAME_MAX_LENGTH, FILENAME_WORD_COUNT)
-        
+
         # Standard TTS REST API
         synthesis_url = f"https://{speech_region}.tts.speech.microsoft.com/cognitiveservices/v1"
-        
+
         # Generate SSML based on character voice setting
         if enable_character_voices:
             ssml = generate_character_ssml(
@@ -439,16 +447,16 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
             )
         else:
             ssml = generate_simple_ssml(text, voice_name, style)
-        
+
         headers = {
             'Ocp-Apim-Subscription-Key': speech_key,
             'Content-Type': 'application/ssml+xml',
             'X-Microsoft-OutputFormat': 'audio-24khz-96kbitrate-mono-mp3',
             'User-Agent': 'TonieboxSynthesisFunction'
         }
-        
+
         response = requests.post(synthesis_url, headers=headers, data=ssml.encode('utf-8'))
-        
+
         if response.status_code != 200:
             logging.error(f"Synthesis failed: {response.status_code}")
             return func.HttpResponse(
@@ -460,25 +468,25 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
                 status_code=500,
                 mimetype="application/json"
             )
-        
+
         audio_data = response.content
         logging.info(f"Synthesized: {len(audio_data)} bytes")
-        
+
         # Upload to blob
         blob_service_client = BlobServiceClient(
             account_url=f"https://{os.environ['STORAGE_ACCOUNT_NAME']}.blob.core.windows.net",
             credential=os.environ['STORAGE_ACCOUNT_KEY']
         )
-        
+
         container_name = os.environ.get('STORAGE_CONTAINER_NAME', 'audio-files')
         blob_client = blob_service_client.get_blob_client(
             container=container_name,
             blob=audio_filename
         )
-        
+
         blob_client.upload_blob(audio_data, overwrite=True)
         logging.info(f"Uploaded: {audio_filename}")
-        
+
         # Generate SAS URL
         sas_token = generate_blob_sas(
             account_name=os.environ['STORAGE_ACCOUNT_NAME'],
@@ -488,9 +496,9 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
             permission=BlobSasPermissions(read=True),
             expiry=datetime.utcnow() + timedelta(hours=24)
         )
-        
+
         sas_url = f"https://{os.environ['STORAGE_ACCOUNT_NAME']}.blob.core.windows.net/{container_name}/{audio_filename}?{sas_token}"
-        
+
         return func.HttpResponse(
             json.dumps({
                 "status": "success",
@@ -503,7 +511,7 @@ def sync_tts(req: func.HttpRequest) -> func.HttpResponse:
             status_code=200,
             mimetype="application/json"
         )
-        
+
     except Exception as e:
         logging.error(f"Error: {str(e)}", exc_info=True)
         return func.HttpResponse(
