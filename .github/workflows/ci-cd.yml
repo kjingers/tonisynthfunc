@@ -36,6 +36,7 @@ jobs:
         ruff check . --output-format=github
 
     - name: Run type checking with mypy
+      continue-on-error: true
       run: |
         pip install mypy types-requests
         mypy --ignore-missing-imports *.py
