@@ -53,7 +53,7 @@ def batch_start(req: func.HttpRequest) -> func.HttpResponse:
             style=style
         )
         if not validation.is_valid:
-            return validation_error(validation.error, validation.field)
+            return validation_error(validation.error or "Validation failed", validation.field)
 
         # Clean markdown formatting from text for better speech synthesis
         # This removes tables, converts bullets to plain text, etc.

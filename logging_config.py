@@ -73,7 +73,7 @@ class StructuredLogger:
         """Log warning message"""
         self.logger.warning(self._format_message(message, "WARNING", **kwargs))
 
-    def error(self, message: str, exception: Exception = None, **kwargs):
+    def error(self, message: str, exception: Exception | None = None, **kwargs):
         """Log error message"""
         if exception:
             kwargs["exception_type"] = type(exception).__name__
@@ -150,7 +150,7 @@ class StructuredLogger:
 logger = StructuredLogger("tonisynthfunc")
 
 
-def log_request(endpoint_name: str = None) -> Callable:
+def log_request(endpoint_name: str | None = None) -> Callable:
     """
     Decorator to log request start/end with timing.
 

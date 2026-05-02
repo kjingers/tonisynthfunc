@@ -111,7 +111,7 @@ ENABLE_CHARACTER_VOICES = False  # Set to True to enable by default
 
 # Custom character-to-voice mappings (optional)
 # Override automatic detection for specific characters
-CHARACTER_VOICE_OVERRIDES = {
+CHARACTER_VOICE_OVERRIDES: dict[str, dict[str, str]] = {
     # Example:
     # "narrator": {"voice": "en-US-GuyNeural", "style": "friendly"},
     # "princess": {"voice": "en-US-JennyNeural", "style": "cheerful", "gender": "female"},
